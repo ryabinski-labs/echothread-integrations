@@ -21,7 +21,7 @@
     "nodes": ["dist/nodes/EchoThread/EchoThread.node.js", "dist/nodes/EchoThread/EchoThreadTrigger.node.js"]
   },
   "devDependencies": {
-    "n8n-workflow": "~1.100.0",
+    "n8n-workflow": "~2.42.1",
     "typescript": "^5.9.0"
   },
   "peerDependencies": { "n8n-workflow": "*" }
