@@ -1,0 +1,22 @@
+{
+  "name": "@echothread/mcp",
+  "version": "0.1.0",
+  "description": "MCP server for EchoThread: read and moderate your site's comments from Claude, ChatGPT or any MCP client.",
+  "mcpName": "io.echothread/mcp",
+  "type": "module",
+  "bin": { "echothread-mcp": "src/index.js" },
+  "main": "src/server.js",
+  "files": ["src", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": { "test": "node --test \"test/*.test.js\"" },
+  "keywords": ["mcp", "model-context-protocol", "echothread", "comments", "moderation", "claude"],
+  "homepage": "https://echothread.io/docs/mcp",
+  "repository": { "type": "git", "url": "git+https://github.com/ryabinski-labs/echothread-integrations.git", "directory": "packages/mcp" },
+  "bugs": { "url": "https://github.com/ryabinski-labs/echothread-integrations/issues" },
+  "license": "MIT",
+  "publishConfig": { "access": "public", "provenance": true },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.31.0",
+    "zod": "^3.25.0"
+  }
+}

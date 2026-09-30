@@ -1,0 +1,61 @@
+# Publishes @echothread/mcp to npm (with provenance) and to the MCP Registry as
+# io.echothread/mcp when a tag mcp-vX.Y.Z is pushed. No manual step.
+#
+# Secrets:
+#   MCP_REGISTRY_PRIVATE_KEY  hex Ed25519 key whose public half is served at
+#                             https://echothread.io/.well-known/mcp-registry-auth
+#   NPM_TOKEN                 only until npm trusted publishing is configured
+#                             for this workflow; OIDC is used when it is.
+name: Release MCP server
+on:
+  push:
+    tags: ['mcp-v*']
+permissions:
+  contents: read
+  id-token: write
+concurrency: release-mcp
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - run: npm install -g npm@^11.5.1
+      - run: npm ci
+      - name: Tag matches every version field
+        working-directory: packages/mcp
+        run: |
+          v="${GITHUB_REF_NAME#mcp-v}"
+          for got in "$(node -p "require('./package.json').version")" \
+                     "$(node -p "require('./server.json').version")" \
+                     "$(node -p "require('./server.json').packages[0].version")"; do
+            [ "$got" = "$v" ] || { echo "::error::version $got does not match tag $v"; exit 1; }
+          done
+      - run: npm test
+      - name: Publish to npm
+        working-directory: packages/mcp
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Install mcp-publisher
+        run: |
+          gh release download v1.8.1 --repo modelcontextprotocol/registry -p mcp-publisher_linux_amd64.tar.gz
+          tar xzf mcp-publisher_linux_amd64.tar.gz mcp-publisher
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - name: Publish to the MCP Registry
+        working-directory: packages/mcp
+        run: |
+          ../../mcp-publisher login http --domain echothread.io --private-key "$MCP_KEY"
+          # The registry checks mcpName on the npm package, which can take a
+          # moment to appear after publishing.
+          for i in 1 2 3 4 5; do
+            ../../mcp-publisher publish && exit 0
+            sleep 30
+          done
+          exit 1
+        env:
+          MCP_KEY: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY }}
