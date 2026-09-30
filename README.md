@@ -5,7 +5,7 @@ Open-source connectors for [EchoThread](https://echothread.io), the comment syst
 | Package | What it is |
 |---|---|
 | [`@echothread/mcp`](packages/mcp) | An MCP server: read and moderate your comments from Claude, ChatGPT or any MCP client. |
-| [`n8n-nodes-echothread`](packages/n8n-nodes-echothread) | n8n nodes: a New Comment trigger and Approve, Reject, Mark Spam and Reply actions. |
+| [`@echothread/n8n-nodes-echothread`](packages/n8n-nodes-echothread) | n8n nodes: a New Comment trigger and Approve, Reject, Mark Spam and Reply actions. |
 
 Both talk to the [EchoThread public API](https://echothread.io/docs/api) with an API token you create at
 [echothread.io/api-tokens](https://echothread.io/api-tokens). A token only ever does what its scopes allow.
