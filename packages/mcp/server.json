@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.echothread/mcp",
+  "title": "EchoThread",
+  "description": "Read and moderate your EchoThread site comments: pending queue, approve, reject, spam, reply.",
+  "websiteUrl": "https://echothread.io/docs/mcp",
+  "repository": {
+    "url": "https://github.com/ryabinski-labs/echothread-integrations",
+    "source": "github",
+    "subfolder": "packages/mcp"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "@echothread/mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "ECHOTHREAD_API_TOKEN",
+          "description": "An EchoThread API token from https://echothread.io/api-tokens",
+          "isRequired": true,
+          "isSecret": true,
+          "format": "string"
+        }
+      ]
+    }
+  ]
+}

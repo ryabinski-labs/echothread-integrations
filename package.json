@@ -1,0 +1,6 @@
+{
+  "name": "echothread-integrations",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": { "test": "npm test --workspaces --if-present" }
+}
