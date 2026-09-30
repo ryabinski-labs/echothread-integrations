@@ -1,0 +1,28 @@
+{
+  "name": "n8n-nodes-echothread",
+  "version": "0.1.0",
+  "description": "n8n nodes for EchoThread: start workflows on new comments, and approve, reject, mark spam or reply.",
+  "keywords": ["n8n-community-node-package", "echothread", "comments", "moderation"],
+  "license": "MIT",
+  "homepage": "https://echothread.io/docs/n8n",
+  "author": { "name": "EchoThread", "email": "noreply@echothread.io" },
+  "repository": { "type": "git", "url": "git+https://github.com/ryabinski-labs/echothread-integrations.git", "directory": "packages/n8n-nodes-echothread" },
+  "files": ["dist", "README.md", "LICENSE"],
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json && cp nodes/EchoThread/echothread.svg dist/nodes/EchoThread/",
+    "test": "npm run build && node --test test/*.test.js",
+    "prepublishOnly": "npm run build"
+  },
+  "publishConfig": { "access": "public", "provenance": true },
+  "n8n": {
+    "n8nNodesApiVersion": 1,
+    "credentials": ["dist/credentials/EchoThreadApi.credentials.js"],
+    "nodes": ["dist/nodes/EchoThread/EchoThread.node.js", "dist/nodes/EchoThread/EchoThreadTrigger.node.js"]
+  },
+  "devDependencies": {
+    "n8n-workflow": "~1.100.0",
+    "typescript": "^5.9.0"
+  },
+  "peerDependencies": { "n8n-workflow": "*" }
+}
