@@ -2,3 +2,4 @@ node_modules/
 *.tgz
 .mcpregistry_*
 key.pem
+dist/
