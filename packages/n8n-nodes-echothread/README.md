@@ -1,4 +1,4 @@
-# n8n-nodes-echothread
+# @echothread/n8n-nodes-echothread
 
 [n8n](https://n8n.io) community nodes for [EchoThread](https://echothread.io), the comment system for blogs and docs.
 
@@ -8,7 +8,7 @@
 
 ## Install
 
-In n8n: **Settings → Community Nodes → Install**, enter `n8n-nodes-echothread`.
+In n8n: **Settings → Community Nodes → Install**, enter `@echothread/n8n-nodes-echothread`.
 
 ## Credentials
 

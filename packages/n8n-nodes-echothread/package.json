@@ -1,5 +1,5 @@
 {
-  "name": "n8n-nodes-echothread",
+  "name": "@echothread/n8n-nodes-echothread",
   "version": "0.1.0",
   "description": "n8n nodes for EchoThread: start workflows on new comments, and approve, reject, mark spam or reply.",
   "keywords": ["n8n-community-node-package", "echothread", "comments", "moderation"],
