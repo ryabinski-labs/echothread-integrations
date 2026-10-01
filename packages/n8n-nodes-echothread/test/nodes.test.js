@@ -65,6 +65,69 @@ test('each comment starts the workflow exactly once across overlapping polls and
   assert.ok(Date.parse(state.since) >= Date.parse(c3.created_at) - OVERLAP_MS - 1)
 })
 
+// SC-n8n-exactly-once (tdd/p1-owner-channels.tdd.yaml): a property over 200
+// generated histories. Comments arrive over simulated time, each visible to
+// the API up to OVERLAP_MS after its created_at (the lag the overlap window
+// exists for); the trigger polls at random moments against a fake API that
+// pages with a random page size. Once everything has arrived and two more
+// polls ran, the emitted ids are exactly the created ids, each once.
+function rng(seed) {
+  let x = seed >>> 0 || 1
+  return () => ((x = (x * 1664525 + 1013904223) >>> 0) / 2 ** 32)
+}
+
+test('property: every created comment is emitted exactly once (200 histories)', async () => {
+  const realNow = Date.now
+  try {
+    for (let seed = 1; seed <= 200; seed++) {
+      const r = rng(seed)
+      let clock = 1_800_000_000_000
+      Date.now = () => clock
+      const start = clock
+      const n = 1 + Math.floor(r() * 40)
+      const comments = []
+      for (let i = 0; i < n; i++) {
+        // Clustered arrivals, and lags biased toward the edge of the window,
+        // so a since that advanced even a few seconds too far loses one.
+        const created = start + 1000 + Math.floor(r() * 180_000)
+        const lag = OVERLAP_MS - 1 - Math.floor(r() ** 3 * (OVERLAP_MS - 1))
+        comments.push({ id: `c${i}`, created, visible: created + lag })
+      }
+      const pageSize = 1 + Math.floor(r() * 5)
+      const api = (opts) => {
+        const since = Date.parse(opts.qs.since)
+        const rows = comments
+          .filter((c) => c.visible <= clock && c.created > since)
+          .sort((a, b) => a.created - b.created || a.id.localeCompare(b.id))
+        const offset = opts.qs.cursor ? Number(opts.qs.cursor) : 0
+        const page = rows.slice(offset, offset + pageSize)
+        const next = offset + pageSize < rows.length ? String(offset + pageSize) : null
+        return ok({ items: page.map((c) => ({ id: c.id, created_at: iso(c.created), status: 'pending' })), next_cursor: next })
+      }
+      const state = {}
+      const emitted = []
+      const poll = async () => {
+        const out = await new EchoThreadTrigger().poll.call(ctx({ state, respond: api }))
+        for (const it of out?.[0] ?? []) emitted.push(it.json.id)
+      }
+      await poll() // activation at `start`, before any comment exists
+      const end = Math.max(...comments.map((c) => c.visible)) + 1
+      while (clock < end) {
+        clock += 1 + Math.floor(r() * 20_000)
+        await poll()
+      }
+      clock += 1000
+      await poll()
+      clock += 1000
+      await poll()
+      const want = comments.map((c) => c.id).sort()
+      assert.deepEqual([...emitted].sort(), want, `seed ${seed}: emitted ${emitted.length}, created ${n}`)
+    }
+  } finally {
+    Date.now = realNow
+  }
+})
+
 test('a Hobby token fails activation with "The n8n node needs Starter" and a pricing link', async () => {
   const c = ctx({ respond: () => ({ statusCode: 403, body: { code: 'feature_required', detail: 'Your Hobby plan does not include this feature (webhooks_api).' } }) })
   await assert.rejects(new EchoThreadTrigger().poll.call(c), (e) => {
