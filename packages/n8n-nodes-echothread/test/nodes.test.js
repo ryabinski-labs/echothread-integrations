@@ -1,11 +1,11 @@
 const { test } = require('node:test')
 const assert = require('node:assert/strict')
-const { EchoThreadTrigger, OVERLAP_MS } = require('../dist/nodes/EchoThread/EchoThreadTrigger.node.js')
+const { EchoThreadTrigger, OVERLAP_MS, MAX_PAGES } = require('../dist/nodes/EchoThread/EchoThreadTrigger.node.js')
 const { EchoThread } = require('../dist/nodes/EchoThread/EchoThread.node.js')
 
 const node = { id: 'n1', name: 'EchoThread', type: 'x', typeVersion: 1, position: [0, 0], parameters: {} }
 
-function ctx({ mode = 'trigger', params = {}, items = [{ json: {} }], state = {}, respond, continueOnFail = false }) {
+function ctx({ mode = 'trigger', params = {}, items = [{ json: {} }], state = {}, respond, continueOnFail = false, creds = {} }) {
   const calls = []
   return {
     calls,
@@ -14,7 +14,7 @@ function ctx({ mode = 'trigger', params = {}, items = [{ json: {} }], state = {}
     getNode: () => node,
     getWorkflowStaticData: () => state,
     getNodeParameter: (name, idxOrDefault, fallback) => (name in params ? params[name] : typeof idxOrDefault === 'number' ? fallback : idxOrDefault),
-    getCredentials: async () => ({ apiToken: 't', baseUrl: 'https://api.test/api/public/v1' }),
+    getCredentials: async () => ({ apiToken: 't', baseUrl: 'https://api.test/api/public/v1', ...creds }),
     getInputData: () => items,
     continueOnFail: () => continueOnFail,
     helpers: {
@@ -171,4 +171,90 @@ test('a token lacking a scope fails the item with the API scope_required message
   const [out] = await new EchoThread().execute.call(soft)
   assert.equal(out.length, 2)
   assert.equal(out[0].json.error, detail)
+})
+
+test('manual runs look back seven days and stop after ten items', async () => {
+  const now = Date.now()
+  const items = Array.from({ length: 15 }, (_, i) => ({ id: `c${i}`, created_at: iso(now - 3_600_000 + i * 1000), status: 'pending' }))
+  const state = {}
+  const c = ctx({ mode: 'manual', state, respond: () => ok({ items, next_cursor: null }) })
+  const out = await new EchoThreadTrigger().poll.call(c)
+  assert.equal(out[0].length, 10)
+  assert.deepEqual(out[0].map((i) => i.json.id), items.slice(-10).map((i) => i.id))
+  assert.ok(Math.abs(Date.parse(c.calls[0].qs.since) - (now - 7 * 24 * 3600 * 1000)) < 5000)
+  assert.equal(state.since, undefined, 'a manual run does not move the saved cursor')
+})
+
+test('a paginated backlog larger than one page is emitted exactly once across polls', async () => {
+  const t = Date.now() - 120_000
+  const all = Array.from({ length: 50 }, (_, i) => ({ id: `c${i}`, created_at: iso(t + i * 100), status: 'pending' }))
+  const api = (opts) => {
+    const since = Date.parse(opts.qs.since)
+    const rows = all.filter((x) => Date.parse(x.created_at) > since)
+    const offset = opts.qs.cursor ? Number(opts.qs.cursor) : 0
+    const page = rows.slice(offset, offset + 2)
+    return ok({ items: page, next_cursor: offset + 2 < rows.length ? String(offset + 2) : null })
+  }
+  const state = { since: iso(t - 1000), seen: {} }
+  const emitted = []
+  for (let i = 0; i < 3; i++) {
+    const out = await new EchoThreadTrigger().poll.call(ctx({ state, respond: api }))
+    for (const it of out?.[0] ?? []) emitted.push(it.json.id)
+  }
+  assert.equal(emitted.length, 50)
+  assert.equal(new Set(emitted).size, 50)
+  assert.equal(Object.keys(state.seen).length, 50)
+})
+
+test('a comment with an unparseable created_at does not freeze the cursor', async () => {
+  const t = Date.now() - 60_000
+  const rows = [
+    { id: 'good1', created_at: iso(t), status: 'pending' },
+    { id: 'bad', created_at: 'not a date', status: 'pending' },
+    { id: 'good2', created_at: iso(t + 2000), status: 'pending' },
+  ]
+  const state = { since: iso(t - 1000), seen: {} }
+  const first = await new EchoThreadTrigger().poll.call(ctx({ state, respond: () => ok({ items: rows, next_cursor: null }) }))
+  assert.deepEqual(first[0].map((i) => i.json.id), ['good1', 'bad', 'good2'])
+  assert.ok(Date.parse(state.since) >= t + 2000 - OVERLAP_MS - 1, 'cursor moved past the valid comments')
+  const second = await new EchoThreadTrigger().poll.call(ctx({ state, respond: () => ok({ items: rows, next_cursor: null }) }))
+  assert.equal(second, null, 'nothing is emitted twice')
+})
+
+test('HTTP and network failures surface as node errors', async () => {
+  const serverError = ctx({ params: { operation: 'approve', commentId: 'c1' }, respond: () => ({ statusCode: 500, body: { detail: 'Something broke' } }) })
+  await assert.rejects(new EchoThread().execute.call(serverError), (e) => { assert.equal(e.message, 'Something broke'); return true })
+
+  const network = ctx({ params: { operation: 'approve', commentId: 'c1' }, respond: () => { throw new Error('ECONNRESET') } })
+  await assert.rejects(new EchoThread().execute.call(network), /ECONNRESET/)
+})
+
+test('continueOnFail keeps every item, its result order and its pairing', async () => {
+  let call = 0
+  const c = ctx({
+    params: { operation: 'approve', commentId: 'c1' },
+    items: [{ json: { n: 0 } }, { json: { n: 1 } }, { json: { n: 2 } }],
+    continueOnFail: true,
+    respond: () => (++call === 2 ? { statusCode: 403, body: { detail: 'Not allowed' } } : ok({ id: 'c1', status: 'approved' })),
+  })
+  const [out] = await new EchoThread().execute.call(c)
+  assert.equal(out.length, 3)
+  assert.deepEqual(out.map((i) => i.pairedItem.item), [0, 1, 2])
+  assert.equal(out[1].json.error, 'Not allowed')
+  assert.equal(out[0].json.id, 'c1')
+})
+
+test('a base URL with trailing slashes does not produce a double slash', async () => {
+  const c = ctx({ params: { operation: 'get', commentId: 'c1' }, creds: { baseUrl: 'https://api.test/api/public/v1///' }, respond: () => ok({ id: 'c1' }) })
+  await new EchoThread().execute.call(c)
+  assert.equal(c.calls[0].url, 'https://api.test/api/public/v1/comments/c1')
+})
+
+test('a cursor that never ends fails loudly without moving the cursor', async () => {
+  const t = Date.now() - 60_000
+  const state = { since: iso(t), seen: {} }
+  const c = ctx({ state, respond: () => ok({ items: [], next_cursor: 'more' }) })
+  await assert.rejects(new EchoThreadTrigger().poll.call(c), /more than 1000 pages/)
+  assert.equal(state.since, iso(t), 'since is untouched, so no comments are skipped')
+  assert.equal(c.calls.length, 1000)
 })

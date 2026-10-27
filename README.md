@@ -17,3 +17,11 @@ Both talk to the [EchoThread public API](https://echothread.io/docs/api) with an
 - `n8n-vX.Y.Z` (matching `packages/n8n-nodes-echothread/package.json`): CI tests and publishes to npm with provenance.
 
 MIT licensed.
+
+## Dependency security
+
+CI runs `npm audit --audit-level=high` and Dependabot watches npm and GitHub Actions. The root
+`overrides` in `package.json` keep `form-data`, `lodash` and `zod` on patched releases because
+`n8n-workflow` 1.x still resolves vulnerable transitive versions (`npm ls` marks those overrides
+"invalid" for the same reason). Drop an override once the upstream package depends on a fixed version
+by itself.
