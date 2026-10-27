@@ -2,8 +2,8 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { EchoThreadClient } from '../src/client.js'
-import { createServer } from '../src/server.js'
+import { ApiError, EchoThreadClient } from '../src/client.js'
+import { createServer, errorText } from '../src/server.js'
 
 // fakeAPI answers like the public API for a token with the given scopes.
 function fakeAPI({ scopes = ['read', 'moderate', 'reply', 'delete'], starter = true } = {}) {
@@ -108,4 +108,33 @@ test('a network failure is a tool error, not a crash', async () => {
 
 test('refuses to start without a token', () => {
   assert.throws(() => new EchoThreadClient({}), /ECHOTHREAD_API_TOKEN is not set/)
+})
+
+test('tool arguments are validated before the API is called', async () => {
+  const api = fakeAPI()
+  const mcp = await connect(api)
+  const bad = [
+    ['get_comment', {}, /comment_id/],
+    ['get_comment', { comment_id: '' }, /comment_id/],
+    ['approve_comment', { comment_id: 42 }, /comment_id/],
+    ['list_pending', {}, /site_id/],
+    ['reply_to_comment', { comment_id: 'c1' }, /body/],
+    ['reply_to_comment', { comment_id: 'c1', body: '' }, /body/],
+    ['reply_to_comment', { comment_id: 'c1', body: 'x'.repeat(10001) }, /10000/],
+  ]
+  for (const [name, args, pattern] of bad) {
+    const res = await mcp.callTool({ name, arguments: args })
+    assert.equal(res.isError, true, `${name} ${JSON.stringify(args).slice(0, 60)}`)
+    assert.match(res.content[0].text, pattern, name)
+  }
+  assert.equal(api.calls.length, 0, 'invalid arguments never reach the API')
+})
+
+test('errorText maps a 401 and a scope refusal to what the user should do', () => {
+  assert.match(errorText(new ApiError(401, { detail: 'nope' })), /rejected the API token.*ECHOTHREAD_API_TOKEN/)
+  assert.equal(
+    errorText(new ApiError(403, { code: 'scope_required', scope: 'reply', detail: 'no' })),
+    'This token lacks the reply scope. Create a token with it at https://echothread.io/api-tokens.',
+  )
+  assert.equal(errorText(new ApiError(403, { code: 'feature_required', detail: 'Upgrade for this feature' })), 'Upgrade for this feature')
 })

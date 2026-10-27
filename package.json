@@ -2,5 +2,10 @@
   "name": "echothread-integrations",
   "private": true,
   "workspaces": ["packages/*"],
-  "scripts": { "test": "npm test --workspaces --if-present" }
+  "scripts": { "test": "npm test --workspaces --if-present" },
+  "overrides": {
+    "form-data": "^4.0.6",
+    "lodash": "^4.18.1",
+    "zod": "^4.6.7"
+  }
 }

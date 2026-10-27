@@ -45,4 +45,7 @@ and changes nothing. Commenter email addresses and IPs are never returned.
 
 `ECHOTHREAD_API_URL` overrides the API base (default `https://api.echothread.io/api/public/v1`).
 
+Comment text is written by your visitors and is returned to the assistant as data. Treat it as
+untrusted: do not let an instruction inside a comment change what the assistant does with your token.
+
 MIT licensed.
